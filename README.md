@@ -1,123 +1,125 @@
-# Task 12: Kubernetes Cluster Setup and Deployment
+# Task 12 - Kubernetes Cluster Setup and Deployment
 
-**Course:** MSc Artificial Intelligence  
-**Practical:** Kubernetes cluster setup and deployment using Minikube
+## Objective
+Understand Kubernetes orchestration and deploy the containerized Task 11 application using a local Minikube cluster.
 
-## Overview
+## Application
+The deployment uses the existing Task 11 container images:
+- `task11-flask-api:latest`
+- `task11-streamlit-ui:latest`
 
-This repository contains starter manifests and command notes for deploying a sample web application to a local Kubernetes cluster with Minikube. The example uses the official NGINX container image and exposes it through a Kubernetes Service.
+The Flask deployment loads `deep_learning_model.h5` inside the API image. The Streamlit deployment calls the Flask service through Kubernetes DNS using `http://flask-api:5000`.
 
-> **Important:** Run the commands and capture your own terminal/browser screenshots before submitting. The manifests are provided as a reproducible example; do not report a step as completed until you have run and verified it on your machine.
-
-## Objectives
-
-- Understand Kubernetes clusters, nodes, Pods, Deployments, and Services.
-- Start a local Kubernetes cluster using Minikube.
-- Deploy a container image using a declarative YAML manifest.
-- Expose the Deployment through a Service.
-- Inspect resources and verify application access.
-
-## Repository structure
-
+## Architecture
 ```text
-task12-kubernetes-cluster-deployment/
-├── README.md
-├── commands.md
-└── k8s/
-    ├── deployment.yaml
-    └── service.yaml
+Browser
+   |
+   v
+Minikube NodePort Service :30080
+   |
+   v
+Streamlit Deployment / Pods :8501
+   |
+   | http://flask-api:5000
+   v
+Flask ClusterIP Service :5000
+   |
+   v
+Flask Deployment / Pods
+   |
+   v
+deep_learning_model.h5
 ```
 
 ## Prerequisites
+- Docker Desktop running
+- Minikube installed
+- kubectl installed or `minikube kubectl --` available
+- Task 11 images already built locally
 
-Install and verify:
-- Docker Desktop (or another supported container runtime)
-- kubectl
-- Minikube
-
-Check versions:
-
+## Setup
 ```powershell
-docker --version
-kubectl version --client
 minikube version
-```
-
-## Deployment steps
-
-### 1. Start Minikube
-
-```powershell
+kubectl version --client
 minikube start --driver=docker
-kubectl cluster-info
 kubectl get nodes
 ```
 
-If you use a different supported driver, replace `docker` with your configured driver.
-
-### 2. Apply the Kubernetes manifests
-
-From the repository root:
-
+## Load Task 11 images into Minikube
 ```powershell
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
+minikube image load task11-flask-api:latest
+minikube image load task11-streamlit-ui:latest
+minikube image ls | Select-String "task11-"
 ```
 
-### 3. Verify resources
-
+## Deploy
 ```powershell
-kubectl get deployments
-kubectl get pods -o wide
-kubectl get services
-kubectl describe deployment task12-nginx
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/flask-deployment.yaml
+kubectl apply -f k8s/flask-service.yaml
+kubectl apply -f k8s/streamlit-deployment.yaml
+kubectl apply -f k8s/streamlit-service.yaml
 ```
 
-Wait until the Pod is in the `Running` state and the Deployment shows an available replica.
-
-### 4. Open the application
-
+## Verify
 ```powershell
-minikube service task12-nginx-service
+kubectl get namespaces
+kubectl get deployments -n task12
+kubectl get pods -n task12 -o wide
+kubectl get services -n task12
+kubectl get endpoints -n task12
+kubectl rollout status deployment/flask-api -n task12
+kubectl rollout status deployment/streamlit-ui -n task12
 ```
 
-Minikube should open the Service URL in a browser. Alternatively, use port forwarding:
-
+## Access Streamlit
 ```powershell
-kubectl port-forward service/task12-nginx-service 8080:80
+minikube service streamlit-ui -n task12 --url
 ```
 
-Then visit http://localhost:8080 while the port-forward command is running.
+Open the returned URL in a browser. Upload the existing `7.png` test image and click **Predict Digit**.
 
-### 5. Clean up
-
+## Test API
 ```powershell
-kubectl delete -f k8s/service.yaml
-kubectl delete -f k8s/deployment.yaml
+kubectl exec -n task12 deployment/flask-api -- python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:5000/health').read().decode())"
+```
+
+Test the API service from the Streamlit pod:
+```powershell
+kubectl exec -n task12 deployment/streamlit-ui -- python -c "import urllib.request; print(urllib.request.urlopen('http://flask-api:5000/health').read().decode())"
+```
+
+## Monitoring
+```powershell
+kubectl get pods -n task12 -w
+kubectl describe deployment flask-api -n task12
+kubectl describe pod -n task12 -l app=flask-api
+kubectl logs -n task12 deployment/flask-api --tail=100
+kubectl logs -n task12 deployment/streamlit-ui --tail=100
+kubectl top pods -n task12
+```
+
+If `kubectl top` reports that Metrics Server is unavailable, this is expected until Minikube metrics are enabled. The core deployment can still be verified using `kubectl get`, `describe`, and logs.
+
+## Cleanup
+```powershell
+kubectl delete namespace task12
 minikube stop
 ```
 
-## Manifests
+## Evidence Sequence
+1. `01_minikube_version.png`
+2. `02_minikube_start.png`
+3. `03_kubectl_nodes.png`
+4. `04_images_loaded.png`
+5. `05_manifests_applied.png`
+6. `06_pods_services.png`
+7. `07_streamlit_browser.png`
+8. `08_prediction_result.png`
+9. `09_api_health.png`
+10. `10_service_dns_test.png`
+11. `11_logs.png`
+12. `12_rollout_status.png`
 
-- `k8s/deployment.yaml`: defines one NGINX replica and its container port.
-- `k8s/service.yaml`: exposes the Deployment using a NodePort Service.
-
-## Evidence checklist
-
-Add your own screenshots to the repository (for example, a `screenshots/` folder):
-- [ ] Minikube running and `kubectl get nodes`
-- [ ] Deployment and Pod status
-- [ ] Service details
-- [ ] NGINX page opened through the Minikube Service or port-forward URL
-- [ ] Any required task-specific output
-
-## Troubleshooting
-
-- **Minikube will not start:** confirm Docker Desktop is running and try `minikube status`.
-- **Pod is pending or failing:** inspect `kubectl describe pod <pod-name>` and `kubectl logs <pod-name>`.
-- **Service is not reachable:** check `kubectl get endpoints`, confirm the Pod is ready, and use `minikube service task12-nginx-service` or port forwarding.
-- **kubectl cannot connect:** run `kubectl config current-context` and `kubectl cluster-info`.
-
-## Notes
-
-This repository is a starter practical implementation. Add your actual command output, screenshots, and final report after validating the steps in your environment.
+Author: Saikumar Padala  
+Course: MSc Artificial Intelligence

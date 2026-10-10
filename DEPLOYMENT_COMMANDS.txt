@@ -1,0 +1,50 @@
+TASK 12 - KUBERNETES CLUSTER SETUP AND DEPLOYMENT
+
+1. Verify tools
+minikube version
+kubectl version --client
+
+2. Start cluster
+minikube start --driver=docker
+kubectl get nodes
+
+3. Load Task 11 container images
+minikube image load task11-flask-api:latest
+minikube image load task11-streamlit-ui:latest
+minikube image ls
+
+4. Deploy
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/flask-deployment.yaml
+kubectl apply -f k8s/flask-service.yaml
+kubectl apply -f k8s/streamlit-deployment.yaml
+kubectl apply -f k8s/streamlit-service.yaml
+
+5. Verify resources
+kubectl get deployments -n task12
+kubectl get pods -n task12 -o wide
+kubectl get services -n task12
+kubectl get endpoints -n task12
+
+6. Rollout checks
+kubectl rollout status deployment/flask-api -n task12
+kubectl rollout status deployment/streamlit-ui -n task12
+
+7. Access UI
+minikube service streamlit-ui -n task12 --url
+
+8. Test API
+kubectl exec -n task12 deployment/flask-api -- python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:5000/health').read().decode())"
+kubectl exec -n task12 deployment/streamlit-ui -- python -c "import urllib.request; print(urllib.request.urlopen('http://flask-api:5000/health').read().decode())"
+
+9. Monitoring
+kubectl get pods -n task12 -w
+kubectl logs -n task12 deployment/flask-api --tail=100
+kubectl logs -n task12 deployment/streamlit-ui --tail=100
+kubectl describe deployment flask-api -n task12
+kubectl describe deployment streamlit-ui -n task12
+kubectl top pods -n task12
+
+10. Cleanup
+kubectl delete namespace task12
+minikube stop
