@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task12-nginx
+  labels:
+    app: task12-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: task12-nginx
+  template:
+    metadata:
+      labels:
+        app: task12-nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:stable
+          ports:
+            - name: http
+              containerPort: 80
